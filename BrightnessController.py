@@ -55,9 +55,9 @@ class BrightnessController:
             print(f"Failed to set brightness to {value} on monitor {monitor_id}.")
             sys.exit(1)
 
-    def adjust_brightness_with_hysterisis(self, current, target, threshold = 10):
+    def adjust_brightness_with_hysterisis(self, current, target):
         """Adjusts brightness with hysteresis to avoid flickering."""
-        if(abs(current - target) > threshold):
+        if(abs(current - target) > self.threshold):
             self.adjust_brightness_(target)
 
     def get_avg_brightness(self, img):
@@ -82,10 +82,17 @@ class BrightnessController:
         scaled = self.scale_brightness(Screen_background)
         current_brightness = self.get_current_brightness(monitor_id)
         desired_brightness = self.max_brightness - scaled  # Inversion logic
-        self.adjust_brightness_with_hysterisis(current_brightness, desired_brightness, self.threshold)
+        self.adjust_brightness_with_hysterisis(current_brightness, desired_brightness)
         return {
             "Screen_background": Screen_background,
             "scaled": scaled,
             "current_brightness": current_brightness,
             "desired_brightness": desired_brightness
         }
+    
+    # IMP: update user input configs dynamically
+    def update_user_config(self, new_config):
+        self.min_brightness = new_config.get('min_brightness', self.min_brightness)
+        self.max_brightness = new_config.get('max_brightness', self.max_brightness)
+        self.threshold = new_config.get('threshold', self.threshold)
+        self.monitors = new_config.get('monitors', self.monitors)

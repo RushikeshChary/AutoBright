@@ -5,10 +5,6 @@ class ConfigLoader:
         self.default_config_path = default_config_path
         self.user_config_path = user_config_path
         self.config = self.load_and_merge_configs()
-        self.interval = self.get('interval')
-        self.use_center = self.get('use_center')
-        print(f"Using interval: {self.interval}, use_center: {self.use_center}")
-        self.monitors = self.get('monitors')
 
     def load_yaml(self, filename):
         """Load YAML from a file gracefully, returning empty dict if file not found or empty."""
@@ -30,3 +26,11 @@ class ConfigLoader:
     def get(self, key, default=None):
         """Safe getter for configuration values."""
         return self.config.get(key, default)
+    
+    # IMP: Add a method to update the config dynamically with input of dictionary.
+    def update(self, new_config):
+        self.config.update(new_config)
+        self.interval = self.get('interval')
+        self.use_center = self.get('use_center')
+        print(f"Updated interval: {self.interval}, use_center: {self.use_center}")
+        self.monitors = self.get('monitors')
