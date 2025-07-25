@@ -160,7 +160,7 @@ class BrightnessApp(tk.Tk):
         Only works when auto mode is not running.
         """
         if not self.is_running:
-            for mid in self.controller.monitors:
+            for mid in self.controller.monitor_list:
                 self.controller.adjust_brightness_direct(int(float(value)), monitor_id=mid)
             # You may update a general info label here if you wish
 
@@ -170,7 +170,6 @@ class BrightnessApp(tk.Tk):
         """
         self.is_running = True
         new_config = self.config_frame.get_config()
-        self.config.update(new_config)
         self.controller.update_user_config(new_config)
         self.start_btn.config(state='disabled')
         self.stop_btn.config(state='normal')
@@ -185,7 +184,7 @@ class BrightnessApp(tk.Tk):
 
         invalid_indices = []
         with mss.mss() as sct:
-            monitor_ids = self.controller.monitors
+            monitor_ids = self.controller.monitor_list
             available = len(sct.monitors) - 1  # mss uses 1-based indexing
             for mid in monitor_ids:
                 if mid < 0 or mid >= available:
@@ -199,8 +198,9 @@ class BrightnessApp(tk.Tk):
                     self.controller,
                     monitor,
                     mid,
-                    new_config['use_center'],
-                    new_config['interval'],
+                    self.config_frame,
+                    # new_config['use_center'],
+                    # new_config['interval'],
                     self.update_status
                 )
                 t.start()

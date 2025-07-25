@@ -9,6 +9,7 @@ class BrightnessController:
         self.min_brightness = min_brightness
         self.max_brightness = max_brightness
         self.monitors = sbc.list_monitors()
+        self.monitor_list = []
 
     def getMonitor(self, monitor_id):
         """Fetches the monitor object by ID."""
@@ -95,4 +96,4 @@ class BrightnessController:
         self.min_brightness = new_config.get('min_brightness', self.min_brightness)
         self.max_brightness = new_config.get('max_brightness', self.max_brightness)
         self.threshold = new_config.get('threshold', self.threshold)
-        self.monitors = new_config.get('monitors', self.monitors)
+        self.monitor_list = new_config.get('monitors', self.monitor_list)
