@@ -32,5 +32,5 @@ class ConfigLoader:
         self.config.update(new_config)
         self.interval = self.get('interval')
         self.use_center = self.get('use_center')
-        print(f"Updated interval: {self.interval}, use_center: {self.use_center}")
+        # print(f"Updated interval: {self.interval}, use_center: {self.use_center}")
         self.monitors = self.get('monitors')

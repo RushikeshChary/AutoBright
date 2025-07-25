@@ -14,7 +14,7 @@ class BrightnessController:
         """Fetches the monitor object by ID."""
         if monitor_id < len(self.monitors):
             return self.monitors[monitor_id]
-        print(f"Monitor {monitor_id} not found.")
+        # print(f"Monitor {monitor_id} not found.")
         return None
 
     def default_brightness(self):

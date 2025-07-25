@@ -137,7 +137,7 @@ class BrightnessApp(tk.Tk):
                 time.sleep(self.config.get("interval"))
 
     def on_closing(self):
-        print("Exiting application...")
+        # print("Exiting application...")
         self.stop()
         self.destroy()
 
@@ -148,8 +148,8 @@ if __name__ == "__main__":
     parser.add_argument("--user-config", help="Path to user config file")
     args = parser.parse_args()
 
-    print("Default config file:", args.config)
-    print("User config file:", args.user_config)
+    # print("Default config file:", args.config)
+    # print("User config file:", args.user_config)
 
     config_loader = CFL.ConfigLoader(args.config, args.user_config)
 
