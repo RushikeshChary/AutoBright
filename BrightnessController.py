@@ -12,7 +12,7 @@ class BrightnessController:
 
     def getMonitor(self, monitor_id):
         """Fetches the monitor object by ID."""
-        if monitor_id < len(self.monitors):
+        if int(monitor_id) < len(self.monitors):
             return self.monitors[monitor_id]
         # print(f"Monitor {monitor_id} not found.")
         return None

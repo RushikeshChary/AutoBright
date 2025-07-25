@@ -1,17 +1,49 @@
+"""
+BrightnessApp.py
+
+A GUI tool for adaptive screen brightness control across multiple monitors.
+
+Features:
+- Manual and automatic brightness adjustment.
+- Per-monitor configuration and status display.
+- Uses screen content analysis to reduce eye strain.
+- Supports user-configurable intervals, thresholds, and regions.
+
+Dependencies:
+- tkinter (for GUI)
+- mss (for screen capture)
+- numpy (for image processing, assumed in logic)
+- BrightnessController, ConfigLoader, MonitorThread (local modules)
+
+Usage:
+    python BrightnessApp.py [--config CONFIG_PATH] [--user-config USER_CONFIG_PATH]
+
+Author: [Your Name]
+Date: [Date]
+"""
+
 import tkinter as tk
 from tkinter import ttk
-import threading
-import time
-import mss
 import argparse
-# Assume your logic and controller class is imported as BrightnessController
-# from brightness_module import BrightnessController, ConfigLoader
+from tkinter import messagebox
+import mss
 import BrightnessController as BNC
 import ConfigLoader as CFL
+import MonitorThread as MT
 
-# Helper class to handle configuration input
-# This class will be used to dynamically update the configuration based on user input
+# ----------------- Helper Classes -----------------
+
 class ConfigInputFrame(ttk.Frame):
+    """
+    Frame for user configuration input.
+
+    Allows the user to set:
+    - Interval (seconds between checks)
+    - Min/Max brightness
+    - Brightness threshold
+    - Whether to use only the center region of the screen
+    - Which monitors to control
+    """
     def __init__(self, parent):
         super().__init__(parent)
         # Interval
@@ -47,6 +79,9 @@ class ConfigInputFrame(ttk.Frame):
         self.pack(pady=10, padx=10, anchor='w')
 
     def get_config(self):
+        """
+        Returns the current configuration as a dictionary.
+        """
         # Safely parse monitors as list of ints
         monitors = [int(idx.strip()) for idx in self.monitors_var.get().split(',') if idx.strip().isdigit()]
         return {
@@ -58,98 +93,156 @@ class ConfigInputFrame(ttk.Frame):
             'monitors': monitors
         }
 
-# Main application class
-# This class will create the GUI and handle user interactions
+# ----------------- Main Application -----------------
+
 class BrightnessApp(tk.Tk):
+    """
+    Main application window for adaptive brightness control.
+
+    Attributes:
+        controller: BrightnessController instance for hardware interaction.
+        config: Current configuration dictionary.
+        is_running: Whether auto mode is active.
+        monitor_threads: List of running MonitorThread objects.
+        status_labels: Dict of status labels per monitor.
+    """
     def __init__(self, controller, config):
+        """
+        Initialize the GUI, widgets, and state.
+        """
         super().__init__()
         self.title("Brightness Controller")
         self.geometry("500x340")
         self.controller = controller
         self.config = config
         self.is_running = False
-        self.worker_thread = None
+        self.monitor_threads = []
+        self.status_labels = {}
 
-        # Configuration input frame
+        # --- GUI Layout ---
+        # Configuration input
         self.config_frame = ConfigInputFrame(self)
         self.config_frame.pack(pady=10, padx=10, fill='x')
 
-        # Status labels
-        self.status_label = ttk.Label(self, text="Status: Idle")
-        self.status_label.pack(pady=8)
+        # Status area for per-monitor feedback
+        self.status_area = ttk.Frame(self)
+        self.status_area.pack(pady=4)
 
         # Manual brightness slider
         self.brightness_slider = ttk.Scale(self, from_=0, to=100, orient='horizontal', command=self.manual_brightness)
-        self.brightness_slider.set(50)  # Default value
+        # self.brightness_slider.set(50)
         ttk.Label(self, text='Manual Brightness').pack()
         self.brightness_slider.pack(padx=20, pady=8, fill='x')
 
-        # Start/stop buttons
+        # Start/Stop buttons
         self.start_btn = ttk.Button(self, text="Start Auto", command=self.start)
         self.start_btn.pack(side='left', padx=10, pady=15)
-
         self.stop_btn = ttk.Button(self, text="Stop Auto", command=self.stop, state='disabled')
         self.stop_btn.pack(side='left', padx=10, pady=15)
 
-        # Clean exit
+        # Handle window close
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
+    def update_status(self, monitor_id, message):
+        """
+        Update the status label for a specific monitor.
+        """
+        if monitor_id not in self.status_labels:
+            label = ttk.Label(self.status_area, text=message)
+            label.pack()
+            self.status_labels[monitor_id] = label
+        else:
+            self.status_labels[monitor_id].config(text=message)
+
     def manual_brightness(self, value):
+        """
+        Set brightness manually for all selected monitors.
+        Only works when auto mode is not running.
+        """
         if not self.is_running:
-            # Only allow manual when auto is off
-            self.controller.adjust_brightness_direct(int(float(value)))
-            self.status_label.config(text=f"Status: Manual brightness set to {int(float(value))}")
-    
+            for mid in self.controller.monitors:
+                self.controller.adjust_brightness_direct(int(float(value)), monitor_id=mid)
+            # You may update a general info label here if you wish
+
     def start(self):
+        """
+        Start automatic brightness adjustment threads for each monitor.
+        """
         self.is_running = True
-        # Load configuration from the input frame
         new_config = self.config_frame.get_config()
         self.config.update(new_config)
         self.controller.update_user_config(new_config)
-
         self.start_btn.config(state='disabled')
         self.stop_btn.config(state='normal')
-        self.brightness_slider.config(state='disabled')  # Disable the slider
-        self.status_label.config(text="Status: Running auto adjustment")
-        self.worker_thread = threading.Thread(target=self.auto_loop, daemon=True)
-        self.worker_thread.start()
+        self.brightness_slider.config(state='disabled')
+
+        # Clear old threads and status labels
+        self.monitor_threads = []
+        for label in self.status_labels.values():
+            label.destroy()
+        self.status_labels = {}
+
+
+        invalid_indices = []
+        with mss.mss() as sct:
+            monitor_ids = self.controller.monitors
+            available = len(sct.monitors) - 1  # mss uses 1-based indexing
+            for mid in monitor_ids:
+                if mid < 0 or mid >= available:
+                   invalid_indices.append(mid)
+                   continue
+                try:
+                    monitor = sct.monitors[mid + 1]  # mss uses 1-based indexing
+                except IndexError:
+                    continue
+                t = MT.MonitorThread(
+                    self.controller,
+                    monitor,
+                    mid,
+                    new_config['use_center'],
+                    new_config['interval'],
+                    self.update_status
+                )
+                t.start()
+                self.monitor_threads.append(t)
+        if invalid_indices:
+            messagebox.showwarning(
+                "Invalid Monitor Index",
+                f"The following monitor indices are invalid and will be ignored: {invalid_indices}\n"
+                f"Available monitors: 0 to {available-1}"
+            )
 
     def stop(self):
+        """
+        Stop all monitor threads and re-enable manual controls.
+        """
         self.is_running = False
+        for thread in self.monitor_threads:
+            thread.stop()
+        for thread in self.monitor_threads:
+            thread.join(timeout=1)
+        self.monitor_threads = []
         self.start_btn.config(state='normal')
         self.stop_btn.config(state='disabled')
-        self.brightness_slider.config(state='normal')  # Enable the slider
-        self.status_label.config(text="Status: Auto adjustment stopped")
-    
-    def auto_loop(self):
-        with mss.mss() as sct:
-            while self.is_running:
-                # for monitor_id, monitor in enumerate(self.controller.monitors):
-                for monitor_id, monitor in enumerate(sct.monitors[1:], start=1):
-                    summary = self.controller.process_monitor(
-                        monitor=monitor,
-                        monitor_id=monitor_id-1,
-                        use_center=self.config.get("use_center")
-                    )
-                    self.status_label.config(
-                        text=f"Monitor {monitor_id}: {int(summary['desired_brightness'])} (auto)"
-                    )
-                time.sleep(self.config.get("interval"))
+        self.brightness_slider.config(state='normal')
 
     def on_closing(self):
-        # print("Exiting application...")
+        """
+        Handle application close event.
+        """
         self.stop()
         self.destroy()
 
+# ----------------- Main Entry Point -----------------
 
 if __name__ == "__main__":
+    """
+    Parse command-line arguments, load configuration, and launch the app.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", help="Path to default config file")
     parser.add_argument("--user-config", help="Path to user config file")
     args = parser.parse_args()
-
-    # print("Default config file:", args.config)
-    # print("User config file:", args.user_config)
 
     config_loader = CFL.ConfigLoader(args.config, args.user_config)
 
